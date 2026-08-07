@@ -1,0 +1,74 @@
+name: Release Jelopathy Bundle
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers on release tags like v1.0.0, v1.0, etc.
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  build-and-release:
+    name: Build Executable & Create Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: Build Tauri Desktop App
+        run: npm run tauri build
+
+      - name: Prepare Release Package Directory
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path bundle_dist
+          
+          # Copy compiled Tauri Executable
+          $exePath = "src-tauri/target/release/jelopathy.exe"
+          if (Test-Path $exePath) {
+              Copy-Item $exePath -Destination "bundle_dist/Jelopathy-v1.exe"
+          } else {
+              Write-Error "Could not find built executable at $exePath"
+              exit 1
+          }
+
+          # Copy Server Script (Supports server.py or server.go if present)
+          if (Test-Path "server/server.py") {
+              Copy-Item "server/server.py" -Destination "bundle_dist/server.py"
+          } elseif (Test-Path "server/main.go") {
+              Copy-Item "server/main.go" -Destination "bundle_dist/server.go"
+          }
+
+          # Create ZIP Bundle
+          Compress-Archive -Path "bundle_dist/*" -DestinationPath "Jelopathy-v1-Bundle.zip" -Force
+
+      - name: Create GitHub Release and Upload Bundle
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Jelopathy-v1-Bundle.zip
+            bundle_dist/Jelopathy-v1.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
