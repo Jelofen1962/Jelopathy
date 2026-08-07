@@ -3,25 +3,46 @@ name: Release Jelopathy Bundle
 on:
   push:
     tags:
-      - 'v*' # Triggers on release tags like v1.0.0, v1.0, etc.
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+      - "v*"
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v1.0.0)"
+        required: true
+        default: "v1.0.0"
+
+permissions:
+  contents: write
 
 jobs:
   build-and-release:
     name: Build Executable & Create Release
     runs-on: windows-latest
 
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_TERM_COLOR: always
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Setup Node.js Environment
+      - name: Checkout Manual Tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git fetch --tags
+          git checkout ${{ github.event.inputs.tag }}
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 24
+          cache: npm
 
-      - name: Install Rust Toolchain
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
@@ -29,46 +50,54 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: |
+            ./src-tauri -> target
 
-      - name: Install Frontend Dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Build Tauri Desktop App
+      - name: Build Tauri
         run: npm run tauri build
 
-      - name: Prepare Release Package Directory
-        shell: powershell
+      - name: Prepare Bundle
+        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path bundle_dist
-          
-          # Copy compiled Tauri Executable
-          $exePath = "src-tauri/target/release/jelopathy.exe"
-          if (Test-Path $exePath) {
-              Copy-Item $exePath -Destination "bundle_dist/Jelopathy-v1.exe"
-          } else {
-              Write-Error "Could not find built executable at $exePath"
-              exit 1
+          New-Item -ItemType Directory -Force bundle_dist | Out-Null
+
+          $exe = Get-ChildItem "src-tauri/target/release" -Filter "*.exe" -Recurse |
+                 Where-Object { $_.Name -notmatch "uninstall|updater" } |
+                 Select-Object -First 1
+
+          if (-not $exe) {
+            Write-Host "Contents of target/release:"
+            Get-ChildItem "src-tauri/target/release" -Recurse
+            throw "Executable not found."
           }
 
-          # Copy Server Script (Supports server.py or server.go if present)
+          Copy-Item $exe.FullName "bundle_dist/Jelopathy-v1.exe"
+
           if (Test-Path "server/server.py") {
-              Copy-Item "server/server.py" -Destination "bundle_dist/server.py"
-          } elseif (Test-Path "server/main.go") {
-              Copy-Item "server/main.go" -Destination "bundle_dist/server.go"
+            Copy-Item "server/server.py" bundle_dist/
           }
 
-          # Create ZIP Bundle
-          Compress-Archive -Path "bundle_dist/*" -DestinationPath "Jelopathy-v1-Bundle.zip" -Force
+          if (Test-Path "server/main.go") {
+            Copy-Item "server/main.go" bundle_dist/
+          }
 
-      - name: Create GitHub Release and Upload Bundle
+          Compress-Archive `
+            -Path "bundle_dist/*" `
+            -DestinationPath "Jelopathy-v1-Bundle.zip" `
+            -Force
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
           files: |
             Jelopathy-v1-Bundle.zip
             bundle_dist/Jelopathy-v1.exe
-          draft: false
-          prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
