@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@font-face {
+  font-family: 'FarsiFont';
+  src: url('/farsi.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'EmojiFont';
+  src: url('/emoji.ttf') format('truetype');
+  font-display: swap;
+}
+
+:root {
+  font-family: 'FarsiFont', 'Poppins', 'EmojiFont', -apple-system, BlinkMacSystemFont, sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #09090b;
+  color: #f4f4f5;
+  overflow: hidden;
+  user-select: none;
+  font-family: 'FarsiFont', 'Poppins', 'EmojiFont', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Fix Persian RTL & English Mix */
+.rtl-auto {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+.ltr-auto {
+  direction: ltr !important;
+}
+
+.ltr-code {
+  direction: ltr !important;
+  text-align: left !important;
+  unicode-bidi: isolate;
+}
+
+/* Custom Dark Scrollbar Matching Theme */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09090b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #09090b;
+}
