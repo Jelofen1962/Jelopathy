@@ -65,16 +65,15 @@ curl http://127.0.0.1:8080/health
 
 **Production deployment:** Put the relay behind HTTPS/TLS, configure a firewall, rotate tokens if exposed, and restrict inbound access. Do not expose the raw HTTP listener directly to the public internet. The token is a shared access secret, not user identity or end-to-end encryption.
 
-## Automated release
+## Automatic tag and release
 
-Push a version tag to trigger Windows and Linux builds:
+Every push to `main` or `master` automatically increments the patch version, updates the project version files, commits that version bump, creates and pushes a new `vMAJOR.MINOR.PATCH` tag, builds Windows and Linux packages, and publishes a GitHub Release. No manual tag is needed.
 
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
+For a deliberate minor or major version increment, open **Actions → Auto Tag, Build and Publish Jelopathy → Run workflow** and select `minor` or `major`. The default is `patch`.
 
-The workflow synchronizes the app, Rust and npm package versions from the tag, then publishes:
+The workflow needs repository **Contents: Read and write** permission. If the default branch is protected, allow GitHub Actions to push version-bump commits or adapt the workflow to tag the commit without pushing the version bump. The workflow intentionally has no tag-push trigger, preventing a release loop.
+
+The workflow synchronizes the app, Rust and npm package versions, then publishes:
 
 - `Jelopathy-vX.Y.Z-windows-x64-portable.exe`
 - `Jelopathy-vX.Y.Z-windows-x64-setup.exe`

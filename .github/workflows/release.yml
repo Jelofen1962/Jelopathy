@@ -1,22 +1,27 @@
-name: Build and Publish Jelopathy
+name: Auto Tag, Build and Publish Jelopathy
 
 on:
   push:
-    tags:
-      - "v*"
-
+    branches:
+      - main
+      - master
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing tag to release (for example v1.0.0)"
+      bump:
+        description: "Version increment for the next automatic tag"
         required: true
-        type: string
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 concurrency:
-  group: jelopathy-release-${{ github.event.inputs.tag || github.ref_name }}
+  group: jelopathy-auto-release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -24,14 +29,136 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-windows:
-    name: Windows · portable EXE + installer
-    runs-on: windows-latest
+  create-tag:
+    name: Calculate version and create tag
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: Checkout release source
+      - name: Checkout source and all tags
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Calculate next version, sync project versions, commit and tag
+        id: version
+        shell: bash
+        env:
+          BUMP_TYPE: ${{ inputs.bump || 'patch' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Find the highest stable vMAJOR.MINOR.PATCH tag. Ignore prereleases.
+          TAG="$(python3 - <<'PY'
+          import re
+          import subprocess
+
+          tags = subprocess.check_output(
+              ["git", "tag", "--list", "v[0-9]*"], text=True
+          ).splitlines()
+          versions = []
+          for tag in tags:
+              match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag.strip())
+              if match:
+                  versions.append(tuple(map(int, match.groups())))
+
+          if not versions:
+              major, minor, patch = (0, 0, 0)
+          else:
+              major, minor, patch = max(versions)
+
+          bump = __import__("os").environ.get("BUMP_TYPE", "patch")
+          if bump == "major":
+              major, minor, patch = major + 1, 0, 0
+          elif bump == "minor":
+              major, minor, patch = major, minor + 1, 0
+          else:
+              major, minor, patch = major, minor, patch + 1
+
+          print(f"v{major}.{minor}.{patch}")
+          PY
+          )"
+          VERSION="${TAG#v}"
+          echo "Creating release tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Update versions inline. This intentionally does not depend on
+          # scripts/set_version.py being present in the repository.
+          python3 - "$VERSION" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          version = sys.argv[1]
+          root = pathlib.Path.cwd()
+
+          for relative in (
+              "package.json",
+              "package-lock.json",
+              "src-tauri/tauri.conf.json",
+          ):
+              path = root / relative
+              if not path.exists():
+                  raise SystemExit(f"Required version file is missing: {relative}")
+              data = json.loads(path.read_text(encoding="utf-8"))
+              data["version"] = version
+              if relative == "package-lock.json":
+                  packages = data.get("packages")
+                  if isinstance(packages, dict) and isinstance(packages.get(""), dict):
+                      packages[""]["version"] = version
+              path.write_text(
+                  json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                  encoding="utf-8",
+              )
+
+          cargo_toml = root / "src-tauri/Cargo.toml"
+          cargo_text = cargo_toml.read_text(encoding="utf-8")
+          cargo_text, count = re.subn(
+              r'(?ms)(^\[package\]\s*.*?^version\s*=\s*)"[^\"]+"',
+              lambda match: match.group(1) + f'"{version}"',
+              cargo_text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not update [package] version in src-tauri/Cargo.toml")
+          cargo_toml.write_text(cargo_text, encoding="utf-8")
+
+          lock_path = root / "src-tauri/Cargo.lock"
+          if lock_path.exists():
+              lock_text = lock_path.read_text(encoding="utf-8")
+              lock_text, count = re.subn(
+                  r'(?s)(\[\[package\]\]\s*\nname\s*=\s*"jelopathy"\s*\nversion\s*=\s*)"[^\"]+"',
+                  lambda match: match.group(1) + f'"{version}"',
+                  lock_text,
+                  count=1,
+              )
+              if count == 1:
+                  lock_path.write_text(lock_text, encoding="utf-8")
+          print(f"Project versions synchronized to {version}")
+          PY
+
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore(release): $TAG"
+          git tag "$TAG"
+          # Push the version bump back to the source branch, then publish the tag.
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin "$TAG"
+
+  build-windows:
+    name: Windows · portable EXE + installer
+    needs: create-tag
+    runs-on: windows-latest
+    steps:
+      - name: Checkout tagged release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.create-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -51,17 +178,6 @@ jobs:
         with:
           workspaces: src-tauri -> src-tauri/target
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set app version from release tag
-        shell: pwsh
-        run: |
-          $tag = git describe --tags --exact-match
-          python scripts/set_version.py $tag
-
       - name: Install frontend dependencies
         run: npm ci
 
@@ -70,12 +186,11 @@ jobs:
 
       - name: Stage Windows release files
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.create-tag.outputs.tag }}
         run: |
           $ErrorActionPreference = "Stop"
-          $version = (git describe --tags --exact-match 2>$null)
-          if (-not $version) { $version = "${{ inputs.tag }}" }
-          if (-not $version) { throw "Could not determine release tag." }
-
+          $version = $env:RELEASE_TAG
           New-Item -ItemType Directory -Force release-assets | Out-Null
 
           $portable = "src-tauri/target/release/jelopathy.exe"
@@ -102,12 +217,13 @@ jobs:
 
   build-linux:
     name: Linux · AppImage
-    runs-on: ubuntu-24.04
+    needs: create-tag
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout release source
+      - name: Checkout tagged release
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.create-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Install Linux build dependencies
@@ -138,13 +254,6 @@ jobs:
         with:
           workspaces: src-tauri -> src-tauri/target
 
-      - name: Set app version from release tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="$(git describe --tags --exact-match)"
-          python3 scripts/set_version.py "$TAG"
-
       - name: Install frontend dependencies
         run: npm ci
 
@@ -153,10 +262,11 @@ jobs:
 
       - name: Stage AppImage
         shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.create-tag.outputs.tag }}
         run: |
           set -euo pipefail
-          VERSION="$(git describe --tags --exact-match 2>/dev/null || printf '%s' '${{ inputs.tag }}')"
-          test -n "$VERSION"
+          VERSION="$RELEASE_TAG"
           mkdir -p release-assets
           mapfile -t images < <(find src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print)
           if [ "${#images[@]}" -eq 0 ]; then
@@ -166,7 +276,6 @@ jobs:
           fi
           cp "${images[0]}" "release-assets/Jelopathy-${VERSION}-linux-x86_64.AppImage"
           chmod +x "release-assets/Jelopathy-${VERSION}-linux-x86_64.AppImage"
-          sha256sum release-assets/* > release-assets/SHA256SUMS.txt
           ls -lh release-assets
 
       - name: Upload Linux assets
@@ -180,6 +289,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs:
+      - create-tag
       - build-windows
       - build-linux
     runs-on: ubuntu-latest
@@ -191,23 +301,22 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Generate checksums for all release files
+      - name: Generate checksums
         shell: bash
         run: |
           set -euo pipefail
           cd release-assets
-          rm -f SHA256SUMS.txt
           sha256sum Jelopathy-* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Publish release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: Jelopathy ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          tag_name: ${{ needs.create-tag.outputs.tag }}
+          name: Jelopathy ${{ needs.create-tag.outputs.tag }}
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-') }}
+          prerelease: false
           files: |
             release-assets/Jelopathy-*
             release-assets/SHA256SUMS.txt

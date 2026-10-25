@@ -75,3 +75,8 @@ This report describes changes in this source pack and what still requires valida
 - `npm ci`: timed out while installing dependencies in this environment.
 - `npm run build`: could not pass because the interrupted install left incomplete `node_modules` type packages.
 - `cargo fmt` / `cargo check`: unavailable because Cargo is not installed in this environment.
+
+
+## Automatic release correction
+
+The release workflow no longer calls `scripts/set_version.py`, so a missing/untracked script cannot fail the release. The `create-tag` job calculates the next stable semantic version from existing `vMAJOR.MINOR.PATCH` tags, updates package/Cargo/Tauri version metadata inline, commits the version bump, creates and pushes the tag, and passes that tag to the Windows and Linux build jobs. Pushes to `main`/`master` automatically create patch releases; manual workflow dispatch supports patch/minor/major. The workflow does not listen for tag pushes, avoiding a recursive release loop.
