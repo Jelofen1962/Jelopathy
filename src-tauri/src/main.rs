@@ -45,17 +45,16 @@ fn resolve_app_dir(app_handle: &AppHandle) -> PathBuf {
     dir
 }
 
-fn init_db(app_dir: &PathBuf) -> Connection {
+fn init_db(app_dir: &PathBuf) -> Result<Connection, String> {
     let db_path = app_dir.join("jelopathy.db");
-    let conn = Connection::open(db_path).expect("Failed to open SQLite database");
+    let conn = Connection::open(db_path).map_err(|e| format!("Could not open local message database: {e}"))?;
 
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
          PRAGMA busy_timeout = 5000;
          PRAGMA foreign_keys = ON;",
-    )
-    .expect("Failed to configure SQLite PRAGMA settings");
+    ).map_err(|e| format!("Could not configure local database: {e}"))?;
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS messages (
@@ -66,18 +65,13 @@ fn init_db(app_dir: &PathBuf) -> Connection {
             content TEXT NOT NULL,
             msg_type TEXT NOT NULL,
             timestamp INTEGER NOT NULL
-        )",
-        [],
-    )
-    .expect("Failed to create messages table");
+        )", [],
+    ).map_err(|e| format!("Could not initialize message table: {e}"))?;
 
     conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_room_time ON messages(room_id, timestamp DESC)",
-        [],
-    )
-    .ok();
-
-    conn
+        "CREATE INDEX IF NOT EXISTS idx_room_time ON messages(room_id, timestamp DESC)", [],
+    ).map_err(|e| format!("Could not initialize message index: {e}"))?;
+    Ok(conn)
 }
 
 #[tauri::command]
@@ -103,8 +97,18 @@ fn save_user_profile(profile: UserProfile, state: State<AppState>) -> Result<(),
         file.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
     }
-    fs::rename(temp_path, target_path).map_err(|e| e.to_string())?;
-
+    // Windows does not consistently replace an existing target via rename. Keep a backup
+    // during replacement so a failed write does not destroy the last valid profile.
+    let backup_path = state.app_dir.join("usersdata.json.bak");
+    if target_path.exists() {
+        let _ = fs::remove_file(&backup_path);
+        fs::rename(&target_path, &backup_path).map_err(|e| format!("Could not back up existing profile: {e}"))?;
+    }
+    if let Err(err) = fs::rename(&temp_path, &target_path) {
+        if backup_path.exists() { let _ = fs::rename(&backup_path, &target_path); }
+        return Err(format!("Could not save profile: {err}"));
+    }
+    let _ = fs::remove_file(backup_path);
     Ok(())
 }
 
@@ -131,6 +135,9 @@ fn save_message(msg: ChatMessage, state: State<AppState>) -> Result<(), String> 
 /// High-speed transactional batch saving for sync payloads
 #[tauri::command]
 fn save_messages_batch(msgs: Vec<ChatMessage>, state: State<AppState>) -> Result<(), String> {
+    if msgs.len() > 1000 {
+        return Err("A sync batch cannot exceed 1000 messages".to_string());
+    }
     let mut conn = state.db.lock().map_err(|e| e.to_string())?;
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     {
@@ -165,6 +172,9 @@ fn get_messages(
     limit: i64,
     state: State<AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
+    if room_id.trim().is_empty() { return Err("Room ID cannot be empty".to_string()); }
+    let safe_limit = limit.clamp(1, 200);
+    let safe_offset = offset.max(0);
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     
     let mut stmt = conn
@@ -182,7 +192,7 @@ fn get_messages(
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map(params![room_id, limit, offset], |row| {
+        .query_map(params![room_id, safe_limit, safe_offset], |row| {
             Ok(ChatMessage {
                 id: row.get(0)?,
                 room_id: row.get(1)?,
@@ -195,17 +205,18 @@ fn get_messages(
         })
         .map_err(|e| e.to_string())?;
 
-    let mut result = Vec::with_capacity(limit as usize);
-    for r in rows {
-        if let Ok(m) = r {
-            result.push(m);
-        }
+    let mut result = Vec::with_capacity(safe_limit as usize);
+    for row in rows {
+        result.push(row.map_err(|e| format!("Could not read local message: {e}"))?);
     }
     Ok(result)
 }
 
 #[tauri::command]
 fn convert_to_webp(base64_raw: String) -> Result<String, String> {
+    if base64_raw.len() > 12 * 1024 * 1024 {
+        return Err("Image is too large. Maximum encoded size is 12 MiB".to_string());
+    }
     let raw = if let Some(idx) = base64_raw.find(',') {
         &base64_raw[idx + 1..]
     } else {
@@ -235,7 +246,10 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let app_dir = resolve_app_dir(app.handle());
-            let conn = init_db(&app_dir);
+            let conn = init_db(&app_dir).map_err(|e| {
+                eprintln!("Jelopathy database initialization failed: {e}");
+                std::io::Error::new(std::io::ErrorKind::Other, e)
+            })?;
             app.manage(AppState {
                 db: Mutex::new(conn),
                 app_dir,

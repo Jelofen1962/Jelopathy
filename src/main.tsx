@@ -14,42 +14,36 @@ const safeInvoke = async <T,>(cmd: string, args?: Record<string, unknown>): Prom
   }
 };
 
-// Icons
+// Small inline Lucide-style SVGs keep the app offline-capable and avoid runtime CDN script execution.
 const Icons = {
-  Send: memo(({ className = "w-5 h-5 fill-current" }: { className?: string }) => (
-    <svg className={className} viewBox="0 0 24 24">
-      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+  Send: memo(({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
     </svg>
   )),
-  Image: memo(({ className = "w-5 h-5 fill-current" }: { className?: string }) => (
-    <svg className={className} viewBox="0 0 24 24">
-      <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
+  Image: memo(({ className = "w-5 h-5" }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" />
     </svg>
   )),
   Copy: memo(() => (
-    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="8" y="8" width="13" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
     </svg>
   )),
   ChevronDown: memo(() => (
-    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-      <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
-    </svg>
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
   )),
   ChevronUp: memo(() => (
-    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-      <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z" />
-    </svg>
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6" /></svg>
   )),
   DoorExit: memo(() => (
-    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-      <path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M10 17l5-5-5-5" /><path d="M15 12H3" /><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
     </svg>
   )),
   ArrowDown: memo(() => (
-    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-      <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z" />
-    </svg>
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></svg>
   )),
 };
 
@@ -92,7 +86,9 @@ export function App() {
   const [photoInput, setPhotoInput] = useState<string | null>(null);
 
   const [serverUrl, setServerUrl] = useState('http://localhost:8080');
+  const [serverToken, setServerToken] = useState('');
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [pendingJoin, setPendingJoin] = useState(false);
   const [roomCodeInput, setRoomCodeInput] = useState('');
   
   const [connStatus, setConnStatus] = useState<ConnectionStatus>('disconnected');
@@ -111,6 +107,10 @@ export function App() {
   const [hasMore, setHasMore] = useState(true);
 
   const eventSourceRef = useRef<EventSource | null>(null);
+  const pendingRoomRef = useRef<string | null>(null);
+  const sessionTokenRef = useRef<string>('');
+  const outgoingQueueRef = useRef<object[]>([]);
+  const connectAndJoinRoomRef = useRef<(targetRoomId: string, approved?: boolean) => void>(() => {});
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastTypingEmitRef = useRef<number>(0);
@@ -119,6 +119,13 @@ export function App() {
   const prevScrollHeightRef = useRef<number>(0);
   const prevScrollTopRef = useRef<number>(0);
   const isLoadingOlderRef = useRef<boolean>(false);
+
+  useEffect(() => () => {
+    eventSourceRef.current?.close();
+    sessionTokenRef.current = '';
+    outgoingQueueRef.current = [];
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+  }, []);
 
   // De-duplicated online users list
   const onlineUsersList = useMemo(() => {
@@ -199,48 +206,97 @@ export function App() {
   }, [messages]);
 
   const sendHttpPayload = useCallback(async (payload: object) => {
-    const baseUrl = serverUrl.replace(/\/+$/, '');
+    const baseUrl = serverUrl.trim().replace(/\/+$/, '');
+    if (!sessionTokenRef.current) {
+      if (eventSourceRef.current?.readyState === EventSource.OPEN) {
+        outgoingQueueRef.current.push(payload);
+        return true;
+      }
+      return false;
+    }
     try {
-      await fetch(`${baseUrl}/send`, {
+      const response = await fetch(`${baseUrl}/send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Jelopathy-Session': sessionTokenRef.current,
+          ...(serverToken.trim() ? { Authorization: `Bearer ${serverToken.trim()}` } : {}),
+        },
         body: JSON.stringify(payload),
       });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Relay returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
+      }
+      setConnectError(null);
+      return true;
     } catch (err) {
       console.error('HTTP send error:', err);
+      setConnectError('ارسال به سرور انجام نشد. اتصال، توکن و وضعیت سرور را بررسی کنید.');
+      return false;
     }
-  }, [serverUrl]);
+  }, [serverUrl, serverToken]);
 
-  const connectAndJoinRoom = useCallback((targetRoomId: string) => {
+  const connectAndJoinRoom = useCallback((targetRoomId: string, approved = false) => {
     setConnStatus('connecting');
     setConnectError(null);
 
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
+    eventSourceRef.current = null;
+    sessionTokenRef.current = '';
+    outgoingQueueRef.current = [];
 
     try {
-      const baseUrl = serverUrl.replace(/\/+$/, '');
-      const sseUrl = `${baseUrl}/events?room_id=${encodeURIComponent(targetRoomId)}&user_id=${encodeURIComponent(user?.id || '')}`;
+      const baseUrl = serverUrl.trim().replace(/\/+$/, '');
+      const connectionRoomId = approved ? targetRoomId : `__join__:${targetRoomId}`;
+      const tokenQuery = serverToken.trim() ? `&token=${encodeURIComponent(serverToken.trim())}` : '';
+      const sseUrl = `${baseUrl}/events?room_id=${encodeURIComponent(connectionRoomId)}&user_id=${encodeURIComponent(user?.id || '')}${tokenQuery}`;
       const es = new EventSource(sseUrl);
 
       es.onopen = () => {
         eventSourceRef.current = es;
         setConnStatus('connected');
         setActiveRoomId(targetRoomId);
+        setPendingJoin(!approved);
 
-        sendHttpPayload({ type: 'join_room', room_id: targetRoomId, sender_id: user?.id, user });
-        sendHttpPayload({ type: 'sync_request', room_id: targetRoomId, sender_id: user?.id });
+        sendHttpPayload({ type: 'join_room', room_id: connectionRoomId, sender_id: user?.id, user });
+        if (approved) {
+          sendHttpPayload({ type: 'sync_request', room_id: targetRoomId, sender_id: user?.id });
+        } else {
+          pendingRoomRef.current = targetRoomId;
+          sendHttpPayload({
+            type: 'request_join', room_id: targetRoomId, sender_id: user?.id,
+            sender_name: user?.name || 'Guest',
+          });
+        }
       };
 
       es.onerror = () => {
         setConnStatus('disconnected');
-        setConnectError('خطا در اتصال به سرور! آدرس HTTP را بررسی کنید.');
+        sessionTokenRef.current = '';
+        outgoingQueueRef.current = [];
+        setConnectError('خطا در اتصال به سرور! آدرس، توکن دسترسی و وضعیت سرور را بررسی کنید.');
       };
 
       es.onmessage = async (evt) => {
-        if (!evt.data) return;
-        const data = JSON.parse(evt.data);
+        if (eventSourceRef.current !== es || !evt.data) return;
+        let data: Record<string, any>;
+        try {
+          data = JSON.parse(evt.data);
+          if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+        } catch (parseError) {
+          console.warn('Ignoring malformed relay event:', parseError);
+          return;
+        }
+
+        if (data.type === 'session' && typeof data.session_token === 'string') {
+          sessionTokenRef.current = data.session_token;
+          const queued = outgoingQueueRef.current.splice(0);
+          for (const payload of queued) await sendHttpPayload(payload);
+          return;
+        }
 
         if (data.type === 'chat_message') {
           const msg: ChatMessage = data.message;
@@ -315,8 +371,25 @@ export function App() {
           setPoll(data.poll);
         } else if (data.type === 'poll_result') {
           setPoll(null);
-          if (data.accepted && data.candidate_id === user?.id) {
-            setActiveRoomId(data.room_id);
+          if (data.candidate_id === user?.id) {
+            if (data.accepted) {
+              const approvedRoom = String(data.room_id || pendingRoomRef.current || '');
+              pendingRoomRef.current = null;
+              setPendingJoin(false);
+              if (approvedRoom) connectAndJoinRoomRef.current(approvedRoom, true);
+            } else {
+              eventSourceRef.current?.close();
+              eventSourceRef.current = null;
+              sessionTokenRef.current = '';
+              outgoingQueueRef.current = [];
+              pendingRoomRef.current = null;
+              setActiveRoomId(null);
+              setPendingJoin(false);
+              setConnStatus('disconnected');
+              setRoomPeers([]);
+              setMessages([]);
+              setConnectError('درخواست ورود به اتاق تأیید نشد یا مهلت آن به پایان رسید.');
+            }
           }
         }
       };
@@ -324,14 +397,15 @@ export function App() {
       setConnStatus('disconnected');
       setConnectError('فرمت آدرس URL نامعتبر است.');
     }
-  }, [serverUrl, user, sendHttpPayload]);
+  }, [serverUrl, serverToken, user, sendHttpPayload]);
+  connectAndJoinRoomRef.current = connectAndJoinRoom;
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nameInput.trim()) return;
 
     const newProfile: UserProfile = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 11),
+      id: `usr_${crypto.randomUUID()}`,
       name: nameInput.trim(),
       photo_b64: photoInput || undefined,
       color: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)],
@@ -345,15 +419,22 @@ export function App() {
     e.preventDefault();
     const code = roomCodeInput.trim();
     if (!code || !serverUrl.trim()) return;
-    connectAndJoinRoom(code);
+    try {
+      const parsed = new URL(serverUrl.trim());
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Unsupported protocol');
+      if (code.length > 120) throw new Error('Room code is too long');
+      connectAndJoinRoom(code);
+    } catch {
+      setConnectError('آدرس سرور معتبر نیست. از آدرس HTTP یا HTTPS استفاده کنید.');
+    }
   };
 
   const handleSendMessage = async () => {
-    if (!textInput.trim() || !user || !activeRoomId) return;
+    if (!textInput.trim() || !user || !activeRoomId || pendingJoin) return;
 
     const trimmed = textInput.trim();
     const msg: ChatMessage = {
-      id: 'msg_' + Math.random().toString(36).substring(2, 11),
+      id: `msg_${crypto.randomUUID()}`, 
       room_id: activeRoomId,
       sender_id: user.id,
       sender_name: user.name,
@@ -398,7 +479,7 @@ export function App() {
     }
 
     const now = Date.now();
-    if (user && activeRoomId && now - lastTypingEmitRef.current > 1500) {
+    if (user && activeRoomId && !pendingJoin && now - lastTypingEmitRef.current > 1500) {
       lastTypingEmitRef.current = now;
       sendHttpPayload({
         type: 'typing',
@@ -411,7 +492,17 @@ export function App() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user || !activeRoomId) return;
+    if (!file || !user || !activeRoomId || pendingJoin) return;
+    if (!file.type.startsWith('image/')) {
+      setConnectError('فقط فایل تصویری قابل ارسال است.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setConnectError('حجم تصویر باید کمتر از ۸ مگابایت باشد.');
+      e.target.value = '';
+      return;
+    }
 
     sendHttpPayload({
       type: 'sending_image',
@@ -427,7 +518,7 @@ export function App() {
         const webpB64 = await safeInvoke<string>('convert_to_webp', { base64Raw: rawB64 });
 
         const msg: ChatMessage = {
-          id: 'msg_' + Math.random().toString(36).substring(2, 11),
+          id: `msg_${crypto.randomUUID()}`, 
           room_id: activeRoomId,
           sender_id: user.id,
           sender_name: user.name,
@@ -477,7 +568,7 @@ export function App() {
     sendHttpPayload({
       type: 'vote_cast',
       poll_id: poll.poll_id,
-      user_id: user.id,
+      sender_id: user.id,
       vote,
     });
   };
@@ -487,9 +578,9 @@ export function App() {
     return (
       <div dir="rtl" className="w-full h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-7 shadow-2xl flex flex-col items-center">
-          <h1 className="text-2xl font-bold mb-1 tracking-wide text-zinc-100">
-            Jelopathy <span className="text-xs text-zinc-500 font-mono ml-1">v1</span>
-          </h1>
+          <div className="brand-mark brand-mark-large" aria-hidden="true"><span /></div>
+          <h1 className="text-2xl font-bold mb-1 tracking-wide text-zinc-100">Jelopathy</h1>
+          <span className="text-[10px] tracking-[.22em] uppercase text-indigo-200/70 mb-2">private by design</span>
           <p className="text-xs text-zinc-400 mb-6 text-center">ایجاد حساب کاربری جدید</p>
 
           <form onSubmit={handleProfileSubmit} className="w-full space-y-4">
@@ -513,6 +604,11 @@ export function App() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
+                    if (!file.type.startsWith('image/') || file.size > 2 * 1024 * 1024) {
+                      setConnectError('تصویر پروفایل باید عکس و حداکثر ۲ مگابایت باشد.');
+                      e.currentTarget.value = '';
+                      return;
+                    }
                     const r = new FileReader();
                     r.onload = () => setPhotoInput(r.result as string);
                     r.readAsDataURL(file);
@@ -576,6 +672,19 @@ export function App() {
             </div>
 
             <div>
+              <label className="block text-xs text-zinc-400 mb-1 font-mono">Server access token (اختیاری):</label>
+              <input
+                type="password"
+                dir="ltr"
+                autoComplete="off"
+                value={serverToken}
+                onChange={(e) => setServerToken(e.target.value)}
+                placeholder="توکن ساخته‌شده هنگام نصب سرور"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-500 font-mono ltr-code"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs text-zinc-400 mb-1">کد اتاق / گروه:</label>
               <input
                 type="text"
@@ -611,8 +720,12 @@ export function App() {
     <div dir="rtl" className="w-full h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden relative">
       <header className="h-14 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800/80 px-4 flex items-center justify-between shrink-0 z-10">
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="نمایش حساب و کاربران اتاق"
           className="flex items-center space-x-3 space-x-reverse cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setShowAccountModal(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowAccountModal(true); } }}
         >
           {user.photo_b64 ? (
             <img src={user.photo_b64} className="mx-2 w-9 h-9 mr-2 rounded-full object-cover" alt="Avatar" />
@@ -626,23 +739,35 @@ export function App() {
           )}
           <div className="flex flex-col">
             <span className="text-xs font-bold leading-tight">{user.name}</span>
-            <span className="text-[10px] text-zinc-400">
-              اتاق: {activeRoomId} ({onlineUsersList.length} آنلاین)
+            <span className="text-[10px] text-zinc-400 flex items-center gap-1.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${connStatus === 'connected' ? 'bg-emerald-400' : connStatus === 'connecting' ? 'bg-amber-400 animate-pulse' : 'bg-rose-400'}`} />
+              اتاق: {activeRoomId} · {connStatus === 'connected' ? `${onlineUsersList.length} آنلاین` : connStatus === 'connecting' ? 'در حال اتصال' : 'اتصال قطع است'}
             </span>
           </div>
         </div>
 
-        <div className="font-extrabold text-base tracking-wide text-zinc-100 flex items-center">
-          Jelopathy
-          <span className="text-[10px] bg-zinc-800 text-zinc-400 font-mono px-1 py-1 mx-1 rounded ml-1.5 border border-zinc-700">
-            v1
-          </span>
+        <div className="font-extrabold text-base tracking-wide text-zinc-100 flex items-center gap-2">
+          <span className="brand-mark" aria-hidden="true"><span /></span>
+          <span>Jelopathy</span>
+          <span className="text-[9px] bg-indigo-300/10 text-indigo-200 font-mono px-2 py-1 rounded-full border border-indigo-200/10">BETA</span>
         </div>
 
         <button
           onClick={() => {
-            if (eventSourceRef.current) eventSourceRef.current.close();
+            eventSourceRef.current?.close();
+            eventSourceRef.current = null;
+            sessionTokenRef.current = '';
+            outgoingQueueRef.current = [];
+            pendingRoomRef.current = null;
             setActiveRoomId(null);
+            setPendingJoin(false);
+            setConnStatus('disconnected');
+            setRoomPeers([]);
+            setPoll(null);
+            setPeerStatus(null);
+            setMessages([]);
+            setOffset(0);
+            setHasMore(true);
           }}
           title="خروج از این اتاق"
           className="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-xl transition-colors"
@@ -651,13 +776,27 @@ export function App() {
         </button>
       </header>
 
+      {connectError && (
+        <div role="status" className="mx-4 mt-3 rounded-xl border border-rose-400/20 bg-rose-400/8 px-3 py-2 text-xs text-rose-200 flex items-center justify-between gap-3">
+          <span>{connectError}</span>
+          <button type="button" aria-label="بستن پیام خطا" onClick={() => setConnectError(null)} className="shrink-0 rounded-lg px-2 py-1 hover:bg-white/5">×</button>
+        </div>
+      )}
+
+      {pendingJoin && (
+        <div role="status" className="mx-4 mt-3 rounded-xl border border-indigo-300/20 bg-indigo-300/8 px-3 py-3 text-xs text-indigo-100 flex items-center gap-3">
+          <span className="join-spinner" aria-hidden="true" />
+          <span>درخواست ورود ارسال شد. تا تأیید اعضای اتاق، امکان مشاهده و ارسال پیام وجود ندارد.</span>
+        </div>
+      )}
+
       {/* Main Message Stream */}
       <main
         ref={mainScrollRef}
         onScroll={handleScroll}
         className="ltr-auto flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-950"
       >
-        {hasMore && (
+        {!pendingJoin && hasMore && (
           <div className="flex justify-center my-2">
             <button
               onClick={() => loadLocalMessages(offset)}
@@ -668,7 +807,7 @@ export function App() {
           </div>
         )}
 
-        {messages.map((m) => (
+        {!pendingJoin && messages.map((m) => (
           <ChatMessageItem key={m.id} message={m} isMe={m.sender_id === user.id} />
         ))}
       </main>
@@ -693,11 +832,12 @@ export function App() {
       {/* Input Controls */}
       <footer className="ltr-auto p-3 bg-zinc-900 border-t border-zinc-800 shrink-0">
         <div className="flex items-end max-w-4xl mx-auto">
-          <label className="p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-300 transition-colors cursor-pointer shrink-0 mb-0.5 flex items-center justify-center w-10 h-10">
+          <label aria-label="ارسال تصویر" className={`p-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-300 transition-colors cursor-pointer shrink-0 mb-0.5 flex items-center justify-center w-10 h-10 ${pendingJoin ? 'opacity-40 pointer-events-none' : ''}`}>
             <Icons.Image />
             <input
               type="file"
               accept="image/*"
+              disabled={pendingJoin}
               className="hidden"
               onChange={handleImageUpload}
             />
@@ -705,6 +845,7 @@ export function App() {
 
           <textarea
             ref={textareaRef}
+            disabled={pendingJoin}
             rows={1}
             dir="auto"
             value={textInput}
@@ -717,10 +858,11 @@ export function App() {
 
           <button
             onClick={handleSendMessage}
+            disabled={pendingJoin}
             className="p-2.5 bg-zinc-100 text-zinc-950 rounded-xl hover:bg-zinc-300 transition-colors shrink-0 mb-0.5 flex items-center justify-center w-10 h-10"
             title="ارسال"
           >
-            <Icons.Send className="w-5 h-5 fill-current" />
+            <Icons.Send className="w-5 h-5" />
           </button>
         </div>
       </footer>

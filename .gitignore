@@ -24,3 +24,11 @@ dist-ssr
 *.sln
 *.sw?
 ada-brain.gif
+
+# Relay secrets, virtual environments and Python cache
+server/.env
+server/.venv/
+server/__pycache__/
+server/tests/__pycache__/
+__pycache__/
+*.py[cod]

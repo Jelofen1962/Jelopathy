@@ -12,13 +12,18 @@
   "app": {
     "windows": [
       {
-        "title": "Jelopathy",
-        "width": 540,
-        "height": 1080
+        "label": "main",
+        "title": "Jelopathy · گفتگو، با تمرکز",
+        "width": 1180,
+        "height": 800,
+        "minWidth": 780,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost http: https: ws: wss:; font-src 'self' data:;"
     }
   },
   "bundle": {

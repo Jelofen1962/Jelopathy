@@ -1,4 +1,4 @@
-name: Release Jelopathy Bundle
+name: Build and Publish Jelopathy
 
 on:
   push:
@@ -8,96 +8,208 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (example: v1.0.0)"
+        description: "Existing tag to release (for example v1.0.0)"
         required: true
-        default: "v1.0.0"
+        type: string
 
 permissions:
   contents: write
 
+concurrency:
+  group: jelopathy-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build-and-release:
-    name: Build Executable & Create Release
+  build-windows:
+    name: Windows · portable EXE + installer
     runs-on: windows-latest
-
-    env:
-      CARGO_INCREMENTAL: 0
-      CARGO_TERM_COLOR: always
-
     steps:
-      - name: Checkout Repository
+      - name: Checkout release source
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - name: Checkout Manual Tag
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git fetch --tags
-          git checkout ${{ github.event.inputs.tag }}
-
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
-      - name: Install Rust
+      - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: stable
           targets: x86_64-pc-windows-msvc
 
-      - name: Rust Cache
+      - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: |
-            ./src-tauri -> target
+          workspaces: src-tauri -> src-tauri/target
 
-      - name: Install Dependencies
-        run: npm ci
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Build Tauri
-        run: npm run tauri build
-
-      - name: Prepare Bundle
+      - name: Set app version from release tag
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force bundle_dist | Out-Null
+          $tag = git describe --tags --exact-match
+          python scripts/set_version.py $tag
 
-          $exe = Get-ChildItem "src-tauri/target/release" -Filter "*.exe" -Recurse |
-                 Where-Object { $_.Name -notmatch "uninstall|updater" } |
-                 Select-Object -First 1
+      - name: Install frontend dependencies
+        run: npm ci
 
-          if (-not $exe) {
-            Write-Host "Contents of target/release:"
-            Get-ChildItem "src-tauri/target/release" -Recurse
-            throw "Executable not found."
+      - name: Build Windows installer
+        run: npm run tauri -- build --bundles nsis
+
+      - name: Stage Windows release files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (git describe --tags --exact-match 2>$null)
+          if (-not $version) { $version = "${{ inputs.tag }}" }
+          if (-not $version) { throw "Could not determine release tag." }
+
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+
+          $portable = "src-tauri/target/release/jelopathy.exe"
+          if (-not (Test-Path $portable)) {
+            Get-ChildItem "src-tauri/target/release" -Recurse | Select-Object FullName
+            throw "Portable Jelopathy executable was not found."
           }
+          Copy-Item $portable "release-assets/Jelopathy-$version-windows-x64-portable.exe"
 
-          Copy-Item $exe.FullName "bundle_dist/Jelopathy-v1.exe"
+          $installer = Get-ChildItem "src-tauri/target/release/bundle/nsis" -Filter "*.exe" -File |
+            Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not generated." }
+          Copy-Item $installer.FullName "release-assets/Jelopathy-$version-windows-x64-setup.exe"
 
-          if (Test-Path "server/server.py") {
-            Copy-Item "server/server.py" bundle_dist/
-          }
+          Get-ChildItem release-assets | Select-Object Name, Length
 
-          if (Test-Path "server/main.go") {
-            Copy-Item "server/main.go" bundle_dist/
-          }
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
 
-          Compress-Archive `
-            -Path "bundle_dist/*" `
-            -DestinationPath "Jelopathy-v1-Bundle.zip" `
-            -Force
+  build-linux:
+    name: Linux · AppImage
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
 
-      - name: Create Release
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> src-tauri/target
+
+      - name: Set app version from release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$(git describe --tags --exact-match)"
+          python3 scripts/set_version.py "$TAG"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build AppImage
+        run: npm run tauri -- build --bundles appimage
+
+      - name: Stage AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(git describe --tags --exact-match 2>/dev/null || printf '%s' '${{ inputs.tag }}')"
+          test -n "$VERSION"
+          mkdir -p release-assets
+          mapfile -t images < <(find src-tauri/target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print)
+          if [ "${#images[@]}" -eq 0 ]; then
+            find src-tauri/target/release/bundle -maxdepth 3 -type f -print || true
+            echo "AppImage was not generated."
+            exit 1
+          fi
+          cp "${images[0]}" "release-assets/Jelopathy-${VERSION}-linux-x86_64.AppImage"
+          chmod +x "release-assets/Jelopathy-${VERSION}-linux-x86_64.AppImage"
+          sha256sum release-assets/* > release-assets/SHA256SUMS.txt
+          ls -lh release-assets
+
+      - name: Upload Linux assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - build-windows
+      - build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all platform assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*-release-assets"
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums for all release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          rm -f SHA256SUMS.txt
+          sha256sum Jelopathy-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Jelopathy ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, '-') }}
           files: |
-            Jelopathy-v1-Bundle.zip
-            bundle_dist/Jelopathy-v1.exe
+            release-assets/Jelopathy-*
+            release-assets/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

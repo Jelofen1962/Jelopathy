@@ -1,1 +1,54 @@
 @import "tailwindcss";
+
+:root {
+  font-family: 'FarsiFont', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --app-bg: #090b12;
+  --panel: rgba(17, 21, 32, .88);
+  --panel-strong: #111520;
+  --line: rgba(148, 163, 184, .14);
+  --muted: #8c96aa;
+  --text: #f2f5fb;
+  --accent: #8b9cff;
+  --accent-2: #56e0c0;
+  --danger: #fb7185;
+}
+
+@font-face {
+  font-family: 'FarsiFont';
+  src: url('/farsi.ttf') format('truetype');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'EmojiFont';
+  src: url('/emoji.ttf') format('truetype');
+  font-display: swap;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; min-height: 100%; margin: 0; }
+body {
+  overflow: hidden;
+  color: var(--text);
+  background:
+    radial-gradient(ellipse at 15% 5%, rgba(100, 116, 255, .12), transparent 36%),
+    radial-gradient(ellipse at 92% 92%, rgba(46, 213, 177, .08), transparent 34%),
+    var(--app-bg);
+  font-family: 'FarsiFont', 'Inter', 'EmojiFont', ui-sans-serif, system-ui, sans-serif;
+  user-select: text;
+}
+button, input, textarea { font: inherit; }
+button { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: rgba(139, 156, 255, .32); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .24); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .4); }
+* { scrollbar-width: thin; scrollbar-color: rgba(148, 163, 184, .24) transparent; }
+
+.rtl-auto { direction: rtl; text-align: right; unicode-bidi: plaintext; }
+.ltr-auto, .ltr-code { direction: ltr !important; text-align: left !important; unicode-bidi: isolate; }
